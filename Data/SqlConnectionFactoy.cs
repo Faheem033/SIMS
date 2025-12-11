@@ -1,11 +1,10 @@
-using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 
 namespace SIMS.Data
 {
     public static class SqlConnectionFactory
     {
-        public static IDbConnection Create()
+        public static SqlConnection Create()
         {
             return new SqlConnection(DbConfig.ConnectionString);
         }
