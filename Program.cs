@@ -1,2 +1,12 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿using SIMS.UI;
+
+namespace SIMS
+{
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
+            Menu.Start();   // Start the menu-based UI
+        }
+    }
+}
