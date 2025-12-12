@@ -228,16 +228,27 @@ namespace SIMS.BLL.LinqImpl
 
         public List<EventFinancialSummaryDto> GetEventFinancialSummary()
         {
-            return _context.VEventFinancialSummaries.Select(v => new EventFinancialSummaryDto
-            {
-                EventId = v.EventId,
-                EventTitle = v.EventTitle,
-                EventDate = v.EventDate,
-                OrganizedBy = v.OrganizedBy,
-                TotalAllocated = v.TotalAllocated ?? 0m,
-                TotalExpenses = v.TotalExpenses ?? 0m,
-                RemainingAmount = v.RemainingAmount ?? 0m
-            }).ToList();
+            var query =
+                from e in _context.Events
+                where e.EventBudgets.Any()
+                let totalAllocated =
+                    e.EventBudgets.Sum(eb => (decimal?)eb.AmountAllocated) ?? 0m
+                let totalExpenses =
+                    (from eb in e.EventBudgets
+                    join ex in _context.Expenses on eb.BudgetId equals ex.BudgetId
+                    select (decimal?)ex.Amount).Sum() ?? 0m
+                select new EventFinancialSummaryDto
+                {
+                    EventId = e.EventId,
+                    EventTitle = e.Title,
+                    EventDate = e.EventDate,
+                    OrganizedBy = e.OrganizedByNavigation.FullName,
+                    TotalAllocated = totalAllocated,
+                    TotalExpenses = totalExpenses,
+                    RemainingAmount = totalAllocated - totalExpenses
+                };
+
+            return query.ToList();
         }
 
         public List<BudgetUtilizationDto> GetBudgetUtilizationSummary()
@@ -356,19 +367,38 @@ namespace SIMS.BLL.LinqImpl
             _context.Notifications.Update(entity);
             return _context.SaveChanges() > 0;
         }
-
         public List<MemberParticipationSummaryDto> GetMemberParticipationSummary()
         {
-            return _context.VMemberParticipationSummaries.Select(v => new MemberParticipationSummaryDto
-            {
-                MemberId = v.MemberId,
-                FullName = v.FullName,
-                RoleName = v.RoleName,
-                AttendanceRate = v.AttendanceRate ?? 0m,
-                TotalRegistered = v.TotalRegistered ?? 0,
-                TotalAttended = v.TotalAttended ?? 0,
-                TotalCancelled = v.TotalCancelled ?? 0
-            }).ToList();
+            var query =
+                from m in _context.Members
+                select new MemberParticipationSummaryDto
+                {
+                    MemberId = m.MemberId,
+                    FullName = m.FullName,
+                    RoleName = m.Role.RoleName, 
+                    
+                    TotalRegistered = _context.Participations.Count(p =>
+                        p.MemberId == m.MemberId && p.Status == "Registered"),
+
+                    TotalAttended = _context.Participations.Count(p =>
+                        p.MemberId == m.MemberId && p.Status == "Attended"),
+
+                    TotalCancelled = _context.Participations.Count(p =>
+                        p.MemberId == m.MemberId && p.Status == "Cancelled"),
+
+                    AttendanceRate =
+                        (_context.Participations.Count(p => p.MemberId == m.MemberId) == 0)
+                            ? 0m
+                            : (
+                                (decimal)_context.Attendances.Count(a =>
+                                    a.Participation.MemberId == m.MemberId)
+                                * 100m
+                            )
+                            / (decimal)_context.Participations.Count(p =>
+                                    p.MemberId == m.MemberId)
+                };
+
+            return query.ToList();
         }
 
         public List<AttendanceTrendPointDto> GetAttendanceTrend()
