@@ -11,5 +11,6 @@ namespace SIMS.BLL.Models
         public int RoleId { get; set; }
         public DateTime JoinDate { get; set; }
         public bool IsActive { get; set; }
+        public string? PasswordHash { get; set; } 
     }
 }
