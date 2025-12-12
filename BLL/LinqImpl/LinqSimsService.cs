@@ -215,13 +215,7 @@ namespace SIMS.BLL.LinqImpl
                 };
 
                 _context.Expenses.Add(entity);
-
-                budget.FundsUsed += expense.Amount;
-                budget.RemainingFunds = budget.TotalFunds - budget.FundsUsed;
-                budget.LastUpdated = DateTime.Now;
-
-                _context.Budgets.Update(budget);
-                _context.SaveChanges();
+                _context.SaveChanges();  
                 transaction.Commit();
                 return true;
             }
