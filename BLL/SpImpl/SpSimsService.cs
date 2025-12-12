@@ -1,95 +1,21 @@
-// using System;
-// using SIMS.Data;
-// using System.Data;
-// using System.Collections.Generic;
-// using SIMS.BLL.Models;
-
-
-// // I wrote this in the /Data folder, I have the connection string written there. Will prevent multiple string rewrites apart from there
-// // using IDbConnection conn = SqlConnectionFactory.Create();  This will return the DB conenction (hopefully)
-
-// namespace SIMS.BLL.SpImpl
-// {
-//     public class SpSimsService : InterfaceSimsService
-//     {
-//         public List<MemberDto> GetMembers(string? searchTerm = null) =>
-//             throw new NotImplementedException();
-
-//         public MemberDto? GetMemberById(int memberId) =>
-//             throw new NotImplementedException();
-
-//         public bool CreateMember(MemberDto member) =>
-//             throw new NotImplementedException();
-
-//         public bool UpdateMember(MemberDto member) =>
-//             throw new NotImplementedException();
-
-//         public bool DeactivateMember(int memberId) =>
-//             throw new NotImplementedException();
-
-//         public List<RoleDto> GetRoles() =>
-//             throw new NotImplementedException();
-
-//         public List<EventDto> GetUpcomingEvents() =>
-//             throw new NotImplementedException();
-
-//         public bool CreateEventWithBudget(EventDto evt, int budgetId) =>
-//             throw new NotImplementedException();
-
-//         public bool RegisterMemberForEvent(int memberId, int eventId) =>
-//             throw new NotImplementedException();
-
-//         public List<BudgetDto> GetBudgets() =>
-//             throw new NotImplementedException();
-
-//         public bool AddExpense(ExpenseDto expense) =>
-//             throw new NotImplementedException();
-
-//         public List<EventFinancialSummaryDto> GetEventFinancialSummary() =>
-//             throw new NotImplementedException();
-
-//         public List<BudgetUtilizationDto> GetBudgetUtilizationSummary() =>
-//             throw new NotImplementedException();
-
-//         public bool CreateAnnouncementAndNotify(AnnouncementDto announcement) =>
-//             throw new NotImplementedException();
-
-//         public List<AnnouncementDto> GetRecentAnnouncements(int maxCount = 20) =>
-//             throw new NotImplementedException();
-
-//         public List<NotificationDto> GetNotificationsForMember(int memberId, bool onlyUnread) =>
-//             throw new NotImplementedException();
-
-//         public bool MarkNotificationAsRead(int notificationId) =>
-//             throw new NotImplementedException();
-
-//         public List<MemberParticipationSummaryDto> GetMemberParticipationSummary() =>
-//             throw new NotImplementedException();
-
-//         public List<AttendanceTrendPointDto> GetAttendanceTrend() =>
-//             throw new NotImplementedException();
-//     }
-// }
-
-
 using System;
-using SIMS.Data;
-using System.Data;
-using Microsoft.Data.SqlClient;
 using System.Collections.Generic;
+using System.Data;
+using Microsoft.Data.SqlClient; // Using the newer library
 using SIMS.BLL.Models;
+using SIMS.Data;
 
 namespace SIMS.BLL.SpImpl
 {
     public class SpSimsService : InterfaceSimsService
     {
-        // Helper to get open connection from Member 1's Factory
+        // 1. Connection Helper
+        // We create a new connection every time to take advantage of "Connection Pooling".
+        // It's like borrowing a book from a library (Pool) and returning it immediately.
         private SqlConnection GetConnection()
         {
-            // We cast IDbConnection to SqlConnection because we need specific SQL capabilities
             var conn = (SqlConnection)SqlConnectionFactory.Create();
-            if (conn.State != ConnectionState.Open)
-                conn.Open();
+            if (conn.State != ConnectionState.Open) conn.Open();
             return conn;
         }
 
@@ -104,16 +30,18 @@ namespace SIMS.BLL.SpImpl
             using (var cmd = new SqlCommand())
             {
                 cmd.Connection = conn;
-                string sql = "SELECT m.*, r.RoleName FROM ems.Member m JOIN ems.Role r ON m.RoleID = r.RoleID";
-                
+
+                // LINQ Equivalent: _context.Members.AsQueryable() ... Where(...)
+                string sql = "SELECT * FROM ems.Member";
+
                 if (!string.IsNullOrEmpty(searchTerm))
                 {
-                    sql += " WHERE m.FullName LIKE @Search OR m.Email LIKE @Search";
+                    sql += " WHERE FullName LIKE @Search OR Email LIKE @Search";
                     cmd.Parameters.AddWithValue("@Search", "%" + searchTerm + "%");
                 }
 
                 cmd.CommandText = sql;
-                
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
@@ -127,33 +55,15 @@ namespace SIMS.BLL.SpImpl
 
         public MemberDto? GetMemberById(int memberId)
         {
-            // REQUIREMENT: Call fn_GetMemberAttendanceRate here
             using (var conn = GetConnection())
-            using (var cmd = new SqlCommand())
+            using (var cmd = new SqlCommand("SELECT * FROM ems.Member WHERE MemberID = @Id", conn))
             {
-                cmd.Connection = conn;
-                // We call the Scalar Function inline
-                cmd.CommandText = @"
-                    SELECT m.*, r.RoleName, 
-                           ems.fn_GetMemberAttendanceRate(m.MemberID) AS AttendanceRate
-                    FROM ems.Member m 
-                    JOIN ems.Role r ON m.RoleID = r.RoleID
-                    WHERE m.MemberID = @Id";
-
                 cmd.Parameters.AddWithValue("@Id", memberId);
-
                 using (var reader = cmd.ExecuteReader())
                 {
                     if (reader.Read())
                     {
-                        var member = MapMember(reader);
-                        // Assuming DTO has an AttendanceRate property (decimal or double)
-                        // If not, you might need to add it to the DTO
-                        if (HasColumn(reader, "AttendanceRate"))
-                             // Store this if MemberDto has a field for it, otherwise ignore
-                             // member.AttendanceRate = Convert.ToDecimal(reader["AttendanceRate"]);
-                        
-                        return member;
+                        return MapMember(reader);
                     }
                 }
             }
@@ -162,36 +72,61 @@ namespace SIMS.BLL.SpImpl
 
         public bool CreateMember(MemberDto member)
         {
+            // LINQ Equivalent: .Add(entity) -> .SaveChanges()
+            // No SP exists for creation, so we use inline SQL.
             try
             {
                 using (var conn = GetConnection())
-                using (var cmd = new SqlCommand("INSERT INTO ems.Member (FullName, Email, PhoneNumber, RoleID, PasswordHash) VALUES (@Name, @Email, @Phone, @Role, @Pass)", conn))
                 {
-                    cmd.Parameters.AddWithValue("@Name", member.FullName);
-                    cmd.Parameters.AddWithValue("@Email", member.Email);
-                    cmd.Parameters.AddWithValue("@Phone", member.PhoneNumber ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@Role", member.RoleId);
-                    cmd.Parameters.AddWithValue("@Pass", "default_hash"); // Simplified for assignment
-                    cmd.ExecuteNonQuery();
-                    return true;
+                    string sql = @"INSERT INTO ems.Member (FullName, Email, PhoneNumber, RoleID, JoinDate, PasswordHash, IsActive) 
+                                   VALUES (@Name, @Email, @Phone, @Role, @Join, @Pass, @Active)";
+
+                    using (var cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@Name", member.FullName);
+                        cmd.Parameters.AddWithValue("@Email", member.Email);
+                        cmd.Parameters.AddWithValue("@Phone", member.PhoneNumber ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Role", member.RoleId);
+                        cmd.Parameters.AddWithValue("@Join", member.JoinDate);
+                        cmd.Parameters.AddWithValue("@Pass", member.PasswordHash ?? "");
+                        cmd.Parameters.AddWithValue("@Active", member.IsActive);
+
+                        return cmd.ExecuteNonQuery() > 0;
+                    }
                 }
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
+            }
         }
 
         public bool UpdateMember(MemberDto member)
         {
+            // LINQ Equivalent: .Update(entity) -> .SaveChanges()
             try
             {
                 using (var conn = GetConnection())
-                using (var cmd = new SqlCommand("UPDATE ems.Member SET FullName=@Name, PhoneNumber=@Phone, RoleID=@Role WHERE MemberID=@Id", conn))
                 {
-                    cmd.Parameters.AddWithValue("@Name", member.FullName);
-                    cmd.Parameters.AddWithValue("@Phone", member.PhoneNumber ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@Role", member.RoleId);
-                    cmd.Parameters.AddWithValue("@Id", member.MemberId);
-                    cmd.ExecuteNonQuery();
-                    return true;
+                    string sql = @"UPDATE ems.Member 
+                                   SET FullName=@Name, Email=@Email, PhoneNumber=@Phone, RoleID=@Role, 
+                                       JoinDate=@Join, PasswordHash=@Pass, IsActive=@Active 
+                                   WHERE MemberID=@Id";
+
+                    using (var cmd = new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@Name", member.FullName);
+                        cmd.Parameters.AddWithValue("@Email", member.Email);
+                        cmd.Parameters.AddWithValue("@Phone", member.PhoneNumber ?? (object)DBNull.Value);
+                        cmd.Parameters.AddWithValue("@Role", member.RoleId);
+                        cmd.Parameters.AddWithValue("@Join", member.JoinDate);
+                        cmd.Parameters.AddWithValue("@Pass", member.PasswordHash ?? "");
+                        cmd.Parameters.AddWithValue("@Active", member.IsActive);
+                        cmd.Parameters.AddWithValue("@Id", member.MemberId);
+
+                        return cmd.ExecuteNonQuery() > 0;
+                    }
                 }
             }
             catch { return false; }
@@ -205,8 +140,7 @@ namespace SIMS.BLL.SpImpl
                 using (var cmd = new SqlCommand("UPDATE ems.Member SET IsActive = 0 WHERE MemberID = @Id", conn))
                 {
                     cmd.Parameters.AddWithValue("@Id", memberId);
-                    cmd.ExecuteNonQuery();
-                    return true;
+                    return cmd.ExecuteNonQuery() > 0;
                 }
             }
             catch { return false; }
@@ -221,10 +155,11 @@ namespace SIMS.BLL.SpImpl
             {
                 while (reader.Read())
                 {
-                    list.Add(new RoleDto 
-                    { 
-                        RoleId = (int)reader["RoleID"], 
-                        RoleName = (string)reader["RoleName"] 
+                    list.Add(new RoleDto
+                    {
+                        RoleId = (int)reader["RoleID"],
+                        RoleName = (string)reader["RoleName"],
+                        Description = reader["Description"] as string
                     });
                 }
             }
@@ -232,30 +167,38 @@ namespace SIMS.BLL.SpImpl
         }
 
         // =============================================================
-        // EVENT OPERATIONS (MANDATORY STORED PROCEDURES)
+        // EVENT OPERATIONS
         // =============================================================
 
         public List<EventDto> GetUpcomingEvents()
         {
-            // REQUIREMENT: Use View v_UpcomingEvents
+            // LINQ Equivalent: _context.Events.Where(e => e.EventDate >= today)
+            // NOTE: We cannot use View `v_UpcomingEvents` because LINQ selects 
+            // BudgetAllocated and Capacity, but the View does not return those.
+            // We must use raw SQL to match LINQ logic perfectly.
+
             var list = new List<EventDto>();
             using (var conn = GetConnection())
-            using (var cmd = new SqlCommand("SELECT * FROM ems.v_UpcomingEvents", conn))
-            using (var reader = cmd.ExecuteReader())
             {
-                while (reader.Read())
+                string sql = @"SELECT * FROM ems.[Event] WHERE EventDate >= SYSDATETIME()";
+
+                using (var cmd = new SqlCommand(sql, conn))
+                using (var reader = cmd.ExecuteReader())
                 {
-                    list.Add(new EventDto
+                    while (reader.Read())
                     {
-                        EventId = (int)reader["EventID"],
-                        Title = (string)reader["Title"],
-                        Description = (string)reader["Description"],
-                        EventDate = (DateTime)reader["EventDate"],
-                        Venue = (string)reader["Venue"],
-                        OrganizedByMemberId = (int)reader["OrganizedBy"],
-                        BudgetAllocated = (int)reader["BudgetAllocated"],
-                        Capacity = (int)reader["Capacity"],
-                    });
+                        list.Add(new EventDto
+                        {
+                            EventId = (int)reader["EventID"],
+                            Title = (string)reader["Title"],
+                            Description = reader["Description"] as string,
+                            EventDate = (DateTime)reader["EventDate"],
+                            Venue = (string)reader["Venue"],
+                            OrganizedByMemberId = (int)reader["OrganizedBy"], // Matched LINQ property name
+                            BudgetAllocated = (decimal)reader["BudgetAllocated"],
+                            Capacity = (int)reader["Capacity"]
+                        });
+                    }
                 }
             }
             return list;
@@ -263,7 +206,8 @@ namespace SIMS.BLL.SpImpl
 
         public bool CreateEventWithBudget(EventDto evt, int budgetId)
         {
-            // REQUIREMENT: Call sp_CreateEventWithBudget
+            // LINQ Equivalent: Uses Transaction + Logic
+            // SP Equivalent: ems.sp_CreateEventWithBudget (Contains logic + transaction)
             try
             {
                 using (var conn = GetConnection())
@@ -278,7 +222,6 @@ namespace SIMS.BLL.SpImpl
                     cmd.Parameters.AddWithValue("@OrganizedBy", evt.OrganizedByMemberId);
                     cmd.Parameters.AddWithValue("@Capacity", evt.Capacity);
                     cmd.Parameters.AddWithValue("@BudgetID", budgetId);
-                    // Assuming DTO has BudgetAllocated, otherwise pass it separately
                     cmd.Parameters.AddWithValue("@AmountAllocated", evt.BudgetAllocated);
 
                     cmd.ExecuteNonQuery();
@@ -287,15 +230,16 @@ namespace SIMS.BLL.SpImpl
             }
             catch (SqlException ex)
             {
-                // Logic error (e.g. Insufficient Funds) will be caught here
-                Console.WriteLine("SP Error: " + ex.Message);
-                return false; 
+                // SP raises error if funds are insufficient, returning false like LINQ
+                Console.WriteLine(ex.Message);
+                return false;
             }
         }
 
         public bool RegisterMemberForEvent(int memberId, int eventId)
         {
-            // REQUIREMENT: Call sp_RegisterMemberForEvent
+            // LINQ Equivalent: Checks existence, Adds Participation
+            // SP Equivalent: ems.sp_RegisterMemberForEvent (Checks existence + capacity, then inserts)
             try
             {
                 using (var conn = GetConnection())
@@ -310,7 +254,7 @@ namespace SIMS.BLL.SpImpl
             }
             catch (SqlException ex)
             {
-                Console.WriteLine("Registration Error: " + ex.Message);
+                Console.WriteLine(ex.Message);
                 return false;
             }
         }
@@ -334,8 +278,8 @@ namespace SIMS.BLL.SpImpl
                         BudgetName = (string)reader["BudgetName"],
                         TotalFunds = (decimal)reader["TotalFunds"],
                         FundsUsed = (decimal)reader["FundsUsed"],
-                        // RemainingFunds is calculated column, can fetch or calc in C#
-                        RemainingFunds = (decimal)reader["TotalFunds"] - (decimal)reader["FundsUsed"]
+                        RemainingFunds = (decimal)reader["RemainingFunds"], // Calculated in DB
+                        LastUpdated = (DateTime)reader["LastUpdated"]
                     });
                 }
             }
@@ -344,8 +288,9 @@ namespace SIMS.BLL.SpImpl
 
         public bool AddExpense(ExpenseDto expense)
         {
-            // REQUIREMENT: Call sp_AddExpenseWithBudgetCheck
-            // REQUIREMENT: This implicitly tests tr_Expense_AfterInsert
+            // LINQ Equivalent: Transaction + Update Budget manually
+            // SP Equivalent: ems.sp_AddExpenseWithBudgetCheck (Checks logic) 
+            //                + ems.tr_Expense_AfterInsert (Updates Budget automatically)
             try
             {
                 using (var conn = GetConnection())
@@ -363,14 +308,14 @@ namespace SIMS.BLL.SpImpl
             }
             catch (SqlException ex)
             {
-                Console.WriteLine("Expense Error: " + ex.Message);
+                Console.WriteLine(ex.Message);
                 return false;
             }
         }
 
         public List<EventFinancialSummaryDto> GetEventFinancialSummary()
         {
-            // REQUIREMENT: Use View v_EventFinancialSummary
+            // LINQ uses View -> We use View
             var list = new List<EventFinancialSummaryDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("SELECT * FROM ems.v_EventFinancialSummary", conn))
@@ -382,6 +327,8 @@ namespace SIMS.BLL.SpImpl
                     {
                         EventId = (int)reader["EventID"],
                         EventTitle = (string)reader["EventTitle"],
+                        EventDate = (DateTime)reader["EventDate"],
+                        OrganizedBy = (string)reader["OrganizedBy"],
                         TotalAllocated = (decimal)reader["TotalAllocated"],
                         TotalExpenses = (decimal)reader["TotalExpenses"],
                         RemainingAmount = (decimal)reader["RemainingAmount"]
@@ -393,7 +340,8 @@ namespace SIMS.BLL.SpImpl
 
         public List<BudgetUtilizationDto> GetBudgetUtilizationSummary()
         {
-            // REQUIREMENT: Use CTE/SP sp_GetBudgetUtilizationSummary
+            // LINQ calculates RiskLevel in C#
+            // SP Equivalent: ems.sp_GetBudgetUtilizationSummary (Calculates RiskLevel in SQL)
             var list = new List<BudgetUtilizationDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("ems.sp_GetBudgetUtilizationSummary", conn))
@@ -407,6 +355,9 @@ namespace SIMS.BLL.SpImpl
                         {
                             BudgetId = (int)reader["BudgetID"],
                             BudgetName = (string)reader["BudgetName"],
+                            TotalFunds = (decimal)reader["TotalFunds"],
+                            FundsUsed = (decimal)reader["FundsUsed"],
+                            RemainingFunds = (decimal)reader["RemainingFunds"],
                             UsagePercent = (decimal)reader["UsagePercent"],
                             RiskLevel = (string)reader["RiskLevel"]
                         });
@@ -422,7 +373,8 @@ namespace SIMS.BLL.SpImpl
 
         public bool CreateAnnouncementAndNotify(AnnouncementDto announcement)
         {
-            // REQUIREMENT: Call sp_CreateAnnouncementAndNotify
+            // LINQ: Transaction, Insert Announcement, Iterate Members -> Insert Notifications
+            // SP: ems.sp_CreateAnnouncementAndNotify (Does exactly this in SQL Set-based op)
             try
             {
                 using (var conn = GetConnection())
@@ -431,7 +383,6 @@ namespace SIMS.BLL.SpImpl
                     cmd.CommandType = CommandType.StoredProcedure;
                     cmd.Parameters.AddWithValue("@Title", announcement.Title);
                     cmd.Parameters.AddWithValue("@Message", announcement.Message);
-                    // Handle nullable EventID
                     cmd.Parameters.AddWithValue("@EventID", announcement.EventId.HasValue ? (object)announcement.EventId.Value : DBNull.Value);
                     cmd.Parameters.AddWithValue("@CreatedBy", announcement.CreatedByMemberId);
 
@@ -444,20 +395,26 @@ namespace SIMS.BLL.SpImpl
 
         public List<AnnouncementDto> GetRecentAnnouncements(int maxCount = 20)
         {
+            // LINQ: OrderByDescending + Take
             var list = new List<AnnouncementDto>();
             using (var conn = GetConnection())
-            using (var cmd = new SqlCommand($"SELECT TOP {maxCount} * FROM ems.Announcement ORDER BY CreatedAt DESC", conn))
-            using (var reader = cmd.ExecuteReader())
+            using (var cmd = new SqlCommand($"SELECT TOP (@Count) * FROM ems.Announcement ORDER BY CreatedAt DESC", conn))
             {
-                while (reader.Read())
+                cmd.Parameters.AddWithValue("@Count", maxCount);
+                using (var reader = cmd.ExecuteReader())
                 {
-                    list.Add(new AnnouncementDto
+                    while (reader.Read())
                     {
-                        AnnouncementId = (int)reader["AnnouncementID"],
-                        Title = (string)reader["Title"],
-                        Message = (string)reader["Message"],
-                        CreatedAt = (DateTime)reader["CreatedAt"]
-                    });
+                        list.Add(new AnnouncementDto
+                        {
+                            AnnouncementId = (int)reader["AnnouncementID"],
+                            Title = (string)reader["Title"],
+                            Message = (string)reader["Message"],
+                            EventId = reader["EventID"] as int?,
+                            CreatedByMemberId = (int)reader["CreatedBy"],
+                            CreatedAt = (DateTime)reader["CreatedAt"]
+                        });
+                    }
                 }
             }
             return list;
@@ -472,8 +429,10 @@ namespace SIMS.BLL.SpImpl
                 cmd.Connection = conn;
                 string sql = "SELECT * FROM ems.Notification WHERE MemberID = @MemberID";
                 if (onlyUnread) sql += " AND IsRead = 0";
+
+                // Added Order By to match logical expectation (newest first), though LINQ didn't explicitly specify order
                 sql += " ORDER BY CreatedAt DESC";
-                
+
                 cmd.CommandText = sql;
                 cmd.Parameters.AddWithValue("@MemberID", memberId);
 
@@ -484,6 +443,7 @@ namespace SIMS.BLL.SpImpl
                         list.Add(new NotificationDto
                         {
                             NotificationId = (int)reader["NotificationID"],
+                            MemberId = (int)reader["MemberID"],
                             Message = (string)reader["Message"],
                             IsRead = (bool)reader["IsRead"],
                             CreatedAt = (DateTime)reader["CreatedAt"]
@@ -502,20 +462,19 @@ namespace SIMS.BLL.SpImpl
                 using (var cmd = new SqlCommand("UPDATE ems.Notification SET IsRead = 1 WHERE NotificationID = @Id", conn))
                 {
                     cmd.Parameters.AddWithValue("@Id", notificationId);
-                    cmd.ExecuteNonQuery();
-                    return true;
+                    return cmd.ExecuteNonQuery() > 0;
                 }
             }
             catch { return false; }
         }
 
         // =============================================================
-        // ANALYTICS (VIEWS & CTEs)
+        // ANALYTICS
         // =============================================================
 
         public List<MemberParticipationSummaryDto> GetMemberParticipationSummary()
         {
-            // REQUIREMENT: Use View v_MemberParticipationSummary
+            // LINQ uses View -> We use View
             var list = new List<MemberParticipationSummaryDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("SELECT * FROM ems.v_MemberParticipationSummary", conn))
@@ -530,7 +489,8 @@ namespace SIMS.BLL.SpImpl
                         RoleName = (string)reader["RoleName"],
                         AttendanceRate = (decimal)reader["AttendanceRate"],
                         TotalRegistered = (int)reader["TotalRegistered"],
-                        TotalAttended = (int)reader["TotalAttended"]
+                        TotalAttended = (int)reader["TotalAttended"],
+                        TotalCancelled = (int)reader["TotalCancelled"]
                     });
                 }
             }
@@ -539,7 +499,8 @@ namespace SIMS.BLL.SpImpl
 
         public List<AttendanceTrendPointDto> GetAttendanceTrend()
         {
-            // REQUIREMENT: Use CTE/SP sp_GetAttendanceTrend
+            // LINQ: Does GroupBy in Memory
+            // SP: ems.sp_GetAttendanceTrend (Does GroupBy in SQL)
             var list = new List<AttendanceTrendPointDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("ems.sp_GetAttendanceTrend", conn))
@@ -551,6 +512,7 @@ namespace SIMS.BLL.SpImpl
                     {
                         list.Add(new AttendanceTrendPointDto
                         {
+                            EventId = (int)reader["EventID"],
                             EventTitle = (string)reader["EventTitle"],
                             Year = (int)reader["Year"],
                             Month = (int)reader["Month"],
@@ -562,10 +524,7 @@ namespace SIMS.BLL.SpImpl
             return list;
         }
 
-        // =============================================================
-        // HELPERS
-        // =============================================================
-
+        // Helper to map Member DataReader to Object cleanly
         private MemberDto MapMember(SqlDataReader reader)
         {
             return new MemberDto
@@ -576,19 +535,9 @@ namespace SIMS.BLL.SpImpl
                 PhoneNumber = reader["PhoneNumber"] as string,
                 RoleId = (int)reader["RoleID"],
                 JoinDate = (DateTime)reader["JoinDate"],
-                PasswordHash = (string)reader["PasswordHash"],
-                IsActive = (bool)reader["IsActive"]
+                IsActive = (bool)reader["IsActive"],
+                PasswordHash = (string)reader["PasswordHash"]
             };
-        }
-
-        private bool HasColumn(SqlDataReader reader, string columnName)
-        {
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                if (reader.GetName(i).Equals(columnName, StringComparison.InvariantCultureIgnoreCase))
-                    return true;
-            }
-            return false;
         }
     }
 }
