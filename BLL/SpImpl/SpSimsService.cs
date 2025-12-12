@@ -9,19 +9,12 @@ namespace SIMS.BLL.SpImpl
 {
     public class SpSimsService : InterfaceSimsService
     {
-        // 1. Connection Helper
-        // We create a new connection every time to take advantage of "Connection Pooling".
-        // It's like borrowing a book from a library (Pool) and returning it immediately.
         private SqlConnection GetConnection()
         {
             var conn = (SqlConnection)SqlConnectionFactory.Create();
             if (conn.State != ConnectionState.Open) conn.Open();
             return conn;
         }
-
-        // =============================================================
-        // MEMBER OPERATIONS
-        // =============================================================
 
         public List<MemberDto> GetMembers(string? searchTerm = null)
         {
@@ -31,7 +24,6 @@ namespace SIMS.BLL.SpImpl
             {
                 cmd.Connection = conn;
 
-                // LINQ Equivalent: _context.Members.AsQueryable() ... Where(...)
                 string sql = "SELECT * FROM ems.Member";
 
                 if (!string.IsNullOrEmpty(searchTerm))
@@ -72,8 +64,6 @@ namespace SIMS.BLL.SpImpl
 
         public bool CreateMember(MemberDto member)
         {
-            // LINQ Equivalent: .Add(entity) -> .SaveChanges()
-            // No SP exists for creation, so we use inline SQL.
             try
             {
                 using (var conn = GetConnection())
@@ -104,7 +94,6 @@ namespace SIMS.BLL.SpImpl
 
         public bool UpdateMember(MemberDto member)
         {
-            // LINQ Equivalent: .Update(entity) -> .SaveChanges()
             try
             {
                 using (var conn = GetConnection())
@@ -166,17 +155,8 @@ namespace SIMS.BLL.SpImpl
             return list;
         }
 
-        // =============================================================
-        // EVENT OPERATIONS
-        // =============================================================
-
         public List<EventDto> GetUpcomingEvents()
         {
-            // LINQ Equivalent: _context.Events.Where(e => e.EventDate >= today)
-            // NOTE: We cannot use View `v_UpcomingEvents` because LINQ selects 
-            // BudgetAllocated and Capacity, but the View does not return those.
-            // We must use raw SQL to match LINQ logic perfectly.
-
             var list = new List<EventDto>();
             using (var conn = GetConnection())
             {
@@ -206,8 +186,6 @@ namespace SIMS.BLL.SpImpl
 
         public bool CreateEventWithBudget(EventDto evt, int budgetId)
         {
-            // LINQ Equivalent: Uses Transaction + Logic
-            // SP Equivalent: ems.sp_CreateEventWithBudget (Contains logic + transaction)
             try
             {
                 using (var conn = GetConnection())
@@ -230,7 +208,6 @@ namespace SIMS.BLL.SpImpl
             }
             catch (SqlException ex)
             {
-                // SP raises error if funds are insufficient, returning false like LINQ
                 Console.WriteLine(ex.Message);
                 return false;
             }
@@ -238,8 +215,6 @@ namespace SIMS.BLL.SpImpl
 
         public bool RegisterMemberForEvent(int memberId, int eventId)
         {
-            // LINQ Equivalent: Checks existence, Adds Participation
-            // SP Equivalent: ems.sp_RegisterMemberForEvent (Checks existence + capacity, then inserts)
             try
             {
                 using (var conn = GetConnection())
@@ -258,11 +233,6 @@ namespace SIMS.BLL.SpImpl
                 return false;
             }
         }
-
-        // =============================================================
-        // BUDGET & EXPENSE OPERATIONS
-        // =============================================================
-
         public List<BudgetDto> GetBudgets()
         {
             var list = new List<BudgetDto>();
@@ -288,9 +258,6 @@ namespace SIMS.BLL.SpImpl
 
         public bool AddExpense(ExpenseDto expense)
         {
-            // LINQ Equivalent: Transaction + Update Budget manually
-            // SP Equivalent: ems.sp_AddExpenseWithBudgetCheck (Checks logic) 
-            //                + ems.tr_Expense_AfterInsert (Updates Budget automatically)
             try
             {
                 using (var conn = GetConnection())
@@ -315,7 +282,6 @@ namespace SIMS.BLL.SpImpl
 
         public List<EventFinancialSummaryDto> GetEventFinancialSummary()
         {
-            // LINQ uses View -> We use View
             var list = new List<EventFinancialSummaryDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("SELECT * FROM ems.v_EventFinancialSummary", conn))
@@ -340,8 +306,6 @@ namespace SIMS.BLL.SpImpl
 
         public List<BudgetUtilizationDto> GetBudgetUtilizationSummary()
         {
-            // LINQ calculates RiskLevel in C#
-            // SP Equivalent: ems.sp_GetBudgetUtilizationSummary (Calculates RiskLevel in SQL)
             var list = new List<BudgetUtilizationDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("ems.sp_GetBudgetUtilizationSummary", conn))
@@ -367,14 +331,8 @@ namespace SIMS.BLL.SpImpl
             return list;
         }
 
-        // =============================================================
-        // ANNOUNCEMENTS & NOTIFICATIONS
-        // =============================================================
-
         public bool CreateAnnouncementAndNotify(AnnouncementDto announcement)
         {
-            // LINQ: Transaction, Insert Announcement, Iterate Members -> Insert Notifications
-            // SP: ems.sp_CreateAnnouncementAndNotify (Does exactly this in SQL Set-based op)
             try
             {
                 using (var conn = GetConnection())
@@ -395,7 +353,6 @@ namespace SIMS.BLL.SpImpl
 
         public List<AnnouncementDto> GetRecentAnnouncements(int maxCount = 20)
         {
-            // LINQ: OrderByDescending + Take
             var list = new List<AnnouncementDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand($"SELECT TOP (@Count) * FROM ems.Announcement ORDER BY CreatedAt DESC", conn))
@@ -430,7 +387,6 @@ namespace SIMS.BLL.SpImpl
                 string sql = "SELECT * FROM ems.Notification WHERE MemberID = @MemberID";
                 if (onlyUnread) sql += " AND IsRead = 0";
 
-                // Added Order By to match logical expectation (newest first), though LINQ didn't explicitly specify order
                 sql += " ORDER BY CreatedAt DESC";
 
                 cmd.CommandText = sql;
@@ -467,14 +423,8 @@ namespace SIMS.BLL.SpImpl
             }
             catch { return false; }
         }
-
-        // =============================================================
-        // ANALYTICS
-        // =============================================================
-
         public List<MemberParticipationSummaryDto> GetMemberParticipationSummary()
         {
-            // LINQ uses View -> We use View
             var list = new List<MemberParticipationSummaryDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("SELECT * FROM ems.v_MemberParticipationSummary", conn))
@@ -499,8 +449,6 @@ namespace SIMS.BLL.SpImpl
 
         public List<AttendanceTrendPointDto> GetAttendanceTrend()
         {
-            // LINQ: Does GroupBy in Memory
-            // SP: ems.sp_GetAttendanceTrend (Does GroupBy in SQL)
             var list = new List<AttendanceTrendPointDto>();
             using (var conn = GetConnection())
             using (var cmd = new SqlCommand("ems.sp_GetAttendanceTrend", conn))
@@ -523,8 +471,6 @@ namespace SIMS.BLL.SpImpl
             }
             return list;
         }
-
-        // Helper to map Member DataReader to Object cleanly
         private MemberDto MapMember(SqlDataReader reader)
         {
             return new MemberDto
