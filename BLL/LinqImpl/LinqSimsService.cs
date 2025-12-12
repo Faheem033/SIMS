@@ -34,7 +34,7 @@ namespace SIMS.BLL.LinqImpl
                 RoleId = m.RoleId,
                 JoinDate = m.JoinDate.ToDateTime(TimeOnly.MinValue),
                 IsActive = m.IsActive,
-                PasswordHash = m.PasswordHash ?? "" 
+                PasswordHash = m.PasswordHash ?? ""
 
             }).ToList();
         }
@@ -52,7 +52,7 @@ namespace SIMS.BLL.LinqImpl
                     RoleId = m.RoleId,
                     JoinDate = m.JoinDate.ToDateTime(TimeOnly.MinValue),
                     IsActive = m.IsActive,
-                    PasswordHash = m.PasswordHash ?? "" 
+                    PasswordHash = m.PasswordHash ?? ""
                 })
                 .FirstOrDefault();
         }
@@ -67,7 +67,7 @@ namespace SIMS.BLL.LinqImpl
                 RoleId = member.RoleId,
                 JoinDate = DateOnly.FromDateTime(member.JoinDate),
                 IsActive = member.IsActive,
-                PasswordHash = member.PasswordHash ?? "" 
+                PasswordHash = member.PasswordHash ?? ""
             };
 
             _context.Members.Add(entity);
@@ -85,7 +85,7 @@ namespace SIMS.BLL.LinqImpl
             entity.RoleId = member.RoleId;
             entity.IsActive = member.IsActive;
             entity.JoinDate = DateOnly.FromDateTime(member.JoinDate);
-            entity.PasswordHash=member.PasswordHash;
+            entity.PasswordHash = member.PasswordHash;
             _context.Members.Update(entity);
             return _context.SaveChanges() > 0;
         }
@@ -215,7 +215,7 @@ namespace SIMS.BLL.LinqImpl
                 };
 
                 _context.Expenses.Add(entity);
-                _context.SaveChanges();  
+                _context.SaveChanges();
                 transaction.Commit();
                 return true;
             }
@@ -373,9 +373,18 @@ namespace SIMS.BLL.LinqImpl
 
         public List<AttendanceTrendPointDto> GetAttendanceTrend()
         {
-            return _context.Participations
-                .Include(p => p.Event)
-                .GroupBy(p => new { p.EventId, p.Event.Title, Year = p.RegistrationDate.Year, Month = p.RegistrationDate.Month })
+            // FIX: We change the source from Participations to Attendances.
+            // This ensures we only count people who actually checked in (matching the SP logic).
+            return _context.Attendances
+                .Include(a => a.Participation)
+                .ThenInclude(p => p.Event) // Join Attendance -> Participation -> Event
+                .GroupBy(a => new
+                {
+                    EventId = a.Participation.EventId,
+                    Title = a.Participation.Event.Title,
+                    Year = a.CheckInTime.Year,  // Group by CheckInTime (not RegistrationDate)
+                    Month = a.CheckInTime.Month
+                })
                 .Select(g => new AttendanceTrendPointDto
                 {
                     EventId = g.Key.EventId,
