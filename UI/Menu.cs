@@ -2,6 +2,7 @@ using System;
 using SIMS.BLL;
 using SIMS.BLL.Factory;
 using SIMS.BLL.Models;
+using System.Text.RegularExpressions;
 using System.Globalization;
 
 namespace SIMS.UI
@@ -89,7 +90,6 @@ namespace SIMS.UI
             }
         }
 
-        // -------------------- Members --------------------
         private static void ListMembers(InterfaceSimsService service)
         {
             var members = service.GetMembers();
@@ -109,6 +109,85 @@ namespace SIMS.UI
                 );
             }
         }
+        private static string GetValidName(string prompt)
+        {
+            while (true)
+            {
+                Console.Write(prompt);
+                string input = (Console.ReadLine() ?? "").Trim();
+
+                if (Regex.IsMatch(input, @"^[A-Za-z ]+$"))
+                    return input;
+
+                Console.WriteLine("Invalid name! Only letters and spaces are allowed.");
+            }
+        }
+
+        private static string ValidateNameInput(string input)
+        {
+            while (true)
+            {
+                if (Regex.IsMatch(input, @"^[A-Za-z ]+$"))
+                    return input;
+
+                Console.Write("Invalid name! Only letters and spaces allowed. Re-enter: ");
+                input = Console.ReadLine();
+            }
+        }
+
+        private static string GetValidPhone(string prompt)
+        {
+            while (true)
+            {
+                Console.Write(prompt);
+                string input = (Console.ReadLine() ?? "").Trim();
+
+                if (Regex.IsMatch(input, @"^\+[1-9]\d{9,14}$"))
+                    return input;
+
+
+                Console.WriteLine("Invalid phone number! Enter 10–15 digits only.");
+            }
+        }
+
+        private static string ValidatePhoneInput(string input)
+        {
+            while (true)
+            {
+                if (Regex.IsMatch(input, @"^[0-9]{10,15}$"))
+                    return input;
+
+                Console.Write("Invalid phone number! Re-enter (10–15 digits): ");
+                input = Console.ReadLine();
+            }
+        }
+
+        private static string GetValidEmail(string prompt)
+        {
+            while (true)
+            {
+                Console.Write(prompt);
+                string input = (Console.ReadLine() ?? "").Trim();
+
+                if (Regex.IsMatch(input, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                    return input;
+
+                Console.WriteLine("Invalid email format!");
+            }
+        }
+
+        private static string ValidateEmailInput(string input)
+        {
+            while (true)
+            {
+                if (Regex.IsMatch(input, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                    return input;
+
+                Console.Write("Invalid email format! Re-enter: ");
+                input = Console.ReadLine();
+            }
+        }
+
         private static void RegisterMember(InterfaceSimsService service)
         {
             int memberId = GetValidInt("Member Id: ");
@@ -124,6 +203,7 @@ namespace SIMS.UI
                 Console.WriteLine("Failed: Member already registered or IDs are invalid.");
             }
         }
+
         private static void ShowBudgetUtilizationSummary(InterfaceSimsService service)
         {
             var summary = service.GetBudgetUtilizationSummary();
@@ -213,9 +293,9 @@ namespace SIMS.UI
             if (!AuthenticateAdmin(service))
                 return;
 
-            string name = GetValidString("Full Name: ");
-            string email = GetValidString("Email: ");
-            string phone = GetValidString("Phone: ");
+            string name = GetValidName("Full Name: ");
+            string email = GetValidEmail("Email: ");
+            string phone = GetValidPhone("Phone: ");
             int roleId = GetValidInt("Role Id: ");
             DateTime joinDate = GetValidDate("Join Date (yyyy-MM-dd): ");
 
@@ -255,15 +335,21 @@ namespace SIMS.UI
 
             Console.Write($"Full Name ({existing.FullName}): ");
             string nameInput = Console.ReadLine();
-            string name = string.IsNullOrWhiteSpace(nameInput) ? existing.FullName : nameInput;
+            string name = string.IsNullOrWhiteSpace(nameInput) 
+            ? existing.FullName 
+            : ValidateNameInput(nameInput);
 
             Console.Write($"Email ({existing.Email}): ");
             string emailInput = Console.ReadLine();
-            string email = string.IsNullOrWhiteSpace(emailInput) ? existing.Email : emailInput;
+            string email = string.IsNullOrWhiteSpace(emailInput) 
+            ? existing.Email 
+            : ValidateEmailInput(emailInput);
 
             Console.Write($"Phone ({existing.PhoneNumber}): ");
             string phoneInput = Console.ReadLine();
-            string phone = string.IsNullOrWhiteSpace(phoneInput) ? existing.PhoneNumber : phoneInput;
+            string phone = string.IsNullOrWhiteSpace(phoneInput) 
+            ? existing.PhoneNumber 
+            : ValidatePhoneInput(phoneInput);
             
             int roleId = GetValidIntOrKeep("Role Id", existing.RoleId);
 
@@ -346,7 +432,6 @@ namespace SIMS.UI
             Console.WriteLine(success ? "Event created successfully!" : "Failed to create event.");
         }
 
-        // -------------------- Budgets & Expenses --------------------
         private static void AddExpense(InterfaceSimsService service)
         {
             string title = GetValidString("Title: ");
@@ -398,7 +483,6 @@ namespace SIMS.UI
             }
         }
 
-        // -------------------- Announcements --------------------
         private static void CreateAnnouncement(InterfaceSimsService service)
         {
             string title = GetValidString("Title: ");
@@ -430,7 +514,6 @@ namespace SIMS.UI
             }
         }
 
-        // -------------------- Notifications --------------------
         private static void ListNotifications(InterfaceSimsService service)
         {
             int memberId = GetValidInt("Member Id: ");
@@ -451,7 +534,6 @@ namespace SIMS.UI
             Console.WriteLine(success ? "Marked as read." : "Failed to mark as read.");
         }
 
-        // -------------------- HELPER VALIDATORS --------------------
         private static bool GetYesNo(string prompt)
         {
             while (true)
@@ -470,7 +552,6 @@ namespace SIMS.UI
         {
             int value;
             Console.Write(prompt);
-            // Added .Trim() to handle accidental spaces
             while (!int.TryParse((Console.ReadLine() ?? "").Trim(), out value))
             {
                 Console.WriteLine("Invalid input! Please enter a valid number.");
@@ -512,13 +593,12 @@ namespace SIMS.UI
             while (string.IsNullOrWhiteSpace(input))
             {
                 Console.Write(prompt);
-                input = (Console.ReadLine() ?? "").Trim(); // Added Trim here too
+                input = (Console.ReadLine() ?? "").Trim(); 
                 if (string.IsNullOrWhiteSpace(input)) Console.WriteLine("Input cannot be empty.");
             }
             return input;
         }
 
-        // --- SPECIAL HELPERS FOR UPDATE (Safe + "Press Enter to Keep") ---
 
         private static int GetValidIntOrKeep(string prompt, int existingValue)
         {
