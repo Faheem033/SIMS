@@ -376,7 +376,7 @@ namespace SIMS.BLL.LinqImpl
                     MemberId = m.MemberId,
                     FullName = m.FullName,
                     RoleName = m.Role.RoleName, 
-                    
+
                     TotalRegistered = _context.Participations.Count(p =>
                         p.MemberId == m.MemberId && p.Status == "Registered"),
 
@@ -403,16 +403,14 @@ namespace SIMS.BLL.LinqImpl
 
         public List<AttendanceTrendPointDto> GetAttendanceTrend()
         {
-            // FIX: We change the source from Participations to Attendances.
-            // This ensures we only count people who actually checked in (matching the SP logic).
             return _context.Attendances
                 .Include(a => a.Participation)
-                .ThenInclude(p => p.Event) // Join Attendance -> Participation -> Event
+                .ThenInclude(p => p.Event)
                 .GroupBy(a => new
                 {
                     EventId = a.Participation.EventId,
                     Title = a.Participation.Event.Title,
-                    Year = a.CheckInTime.Year,  // Group by CheckInTime (not RegistrationDate)
+                    Year = a.CheckInTime.Year, 
                     Month = a.CheckInTime.Month
                 })
                 .Select(g => new AttendanceTrendPointDto

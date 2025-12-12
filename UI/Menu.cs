@@ -239,7 +239,6 @@ namespace SIMS.UI
 
             foreach (var t in trends)
             {
-                // Formatting Date as "2025-10"
                 string period = $"{t.Year}-{t.Month:00}"; 
 
                 Console.WriteLine(
@@ -253,7 +252,6 @@ namespace SIMS.UI
         }
         private static bool AuthenticateAdmin(InterfaceSimsService service)
         {
-            // Replaced parsing with GetValidInt
             int id = GetValidInt("Enter your Member Id: ");
 
             var member = service.GetMemberById(id);
@@ -270,7 +268,6 @@ namespace SIMS.UI
                 return false;
             }
 
-            // Replaced parsing with GetValidString
             string pass = GetValidString("Enter your Password: ");
 
             if (member.PasswordHash != pass)
@@ -578,7 +575,6 @@ namespace SIMS.UI
         {
             DateTime date;
             Console.Write(prompt);
-            // Added .Trim()
             while (!DateTime.TryParse((Console.ReadLine() ?? "").Trim(), out date))
             {
                 Console.WriteLine("Invalid Date! Please use format yyyy-MM-dd (e.g., 2025-12-31).");

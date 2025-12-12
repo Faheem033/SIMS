@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using Microsoft.Data.SqlClient; // Using the newer library
+using Microsoft.Data.SqlClient; 
 using SIMS.BLL.Models;
 using SIMS.Data;
 
