@@ -384,7 +384,7 @@ namespace SIMS.UI
             Console.WriteLine("\nMember Participation Summary:");
             foreach (var s in summaries)
             {
-                Console.WriteLine($"{s.FullName} ({s.RoleName}) - Registered: {s.TotalRegistered}, Attended: {s.TotalAttended}, Cancelled: {s.TotalCancelled}, Attendance Rate: {s.AttendanceRate:P}");
+                Console.WriteLine($"{s.FullName} ({s.RoleName}) - Registered: {s.TotalRegistered}, Attended: {s.TotalAttended}, Cancelled: {s.TotalCancelled}, Attendance Rate: {s.AttendanceRate:F2}%");
             }
         }
 

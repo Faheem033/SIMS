@@ -132,27 +132,16 @@ FROM N;
 -----------------------------------------
 PRINT 'Block 7: Insert Participation';
 
-DECLARE @TotalParticipation INT = 20;
-
-;WITH Numbers AS (
-    SELECT TOP (@TotalParticipation)
-        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS seq
-    FROM sys.all_objects a CROSS JOIN sys.all_objects b
-)
 INSERT INTO ems.Participation (EventID, MemberID, Status)
 SELECT
-    -- Distributes events cyclically
-    ((seq - 1) % @EventCount) + 1 AS EventID,
-    
-    -- Distributes members carefully to avoid Unique Key violations
-    ((seq - 1) / @EventCount) + 1 AS MemberID,
-
-    CASE (seq % 3)
-        WHEN 0 THEN 'Cancelled'
+    E.EventID,
+    ((ABS(CHECKSUM(NEWID())) % 10) + 1) AS MemberID,
+    CASE ABS(CHECKSUM(NEWID())) % 3
+        WHEN 0 THEN 'Registered'
         WHEN 1 THEN 'Attended'
-        ELSE 'Registered'
+        ELSE 'Cancelled'
     END AS Status
-FROM Numbers;
+FROM ems.[Event] E;
 
 -----------------------------------------
 -- BLOCK 8: Attendance (Subset of Participation)
