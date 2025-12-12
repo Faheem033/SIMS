@@ -133,7 +133,6 @@ SELECT
 
     ((seq - 1) / @EventCount) + 1 AS MemberID,
 
-    -- Deterministic Status for variety, 2 in 3 be attending
     CASE (seq % 3)
         WHEN 0 THEN 'Cancelled'
         WHEN 1 THEN 'Attended'
