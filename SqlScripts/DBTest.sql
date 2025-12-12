@@ -47,14 +47,13 @@ PRINT CONCAT('MemberCount = ', @MemberCount);
 PRINT 'Block 3: Insert Budgets';
 
 ;WITH N AS (
-    SELECT TOP (10) 
+    SELECT TOP (15) 
         ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS seq
     FROM sys.all_objects a CROSS JOIN sys.all_objects b
 )
 INSERT INTO ems.Budget (BudgetName, TotalFunds)
 SELECT
     CONCAT('Budget ', seq),
-    -- Random fund between 5,000 and 55,000
     CAST(5000 + (ABS(CHECKSUM(NEWID())) % 50000) AS DECIMAL(14,2))
 FROM N;
 
@@ -89,22 +88,26 @@ DECLARE @EventCount INT = (SELECT COUNT(*) FROM ems.[Event]);
 -----------------------------------------
 -- BLOCK 5: EventBudget (Linked to Events)
 -----------------------------------------
-PRINT 'Block 5: Insert EventBudget';
-
--- Links events to budgets sequentially
-;WITH EventBudgetCTE AS (
-    SELECT 
-        E.EventID,
-        B.BudgetID,
-        E.BudgetAllocated AS AmountAllocated,
-        ROW_NUMBER() OVER (ORDER BY E.EventID) AS rn
-    FROM ems.[Event] E
-    JOIN ems.Budget B ON B.BudgetID <= @BudgetCount
+;WITH EventCTE AS (
+    SELECT EventID,
+           ROW_NUMBER() OVER (ORDER BY EventID) AS rn
+    FROM ems.[Event]
+),
+BudgetCTE AS (
+    SELECT BudgetID,
+           ROW_NUMBER() OVER (ORDER BY BudgetID) AS rn
+    FROM ems.Budget
 )
 INSERT INTO ems.EventBudget (EventID, BudgetID, AmountAllocated)
-SELECT EventID, BudgetID, AmountAllocated
-FROM EventBudgetCTE
-WHERE rn <= @BudgetCount;
+SELECT
+    E.EventID,
+    B.BudgetID,
+    Evt.BudgetAllocated
+FROM EventCTE E
+JOIN BudgetCTE B
+    ON E.rn = B.rn
+JOIN ems.[Event] Evt
+    ON E.EventID = Evt.EventID;
 
 -----------------------------------------
 -- BLOCK 6: Expenses (Target: 20 rows)
